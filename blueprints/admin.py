@@ -1,5 +1,6 @@
 import secrets
 from http import HTTPStatus
+from logging import getLogger
 
 from flask import Blueprint, abort, render_template, request, session
 
@@ -7,6 +8,7 @@ import database
 import settings
 from ext import oidc
 
+logger = getLogger("admin")
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
@@ -19,11 +21,14 @@ def require_admin_group():
         raise abort(
             HTTPStatus.FORBIDDEN, "You dont have the required group to manage clients."
         )
-    return
+    session["username"] = database.users.get_record_by_extid(
+        session["oidc_auth_profile"]["sub"]
+    ).user_name
 
 
 @bp.delete("delete")
 def delete():
+    logger.info("user %s deleted %s", session["username"], request.args["name"])
     database.bindables.delete(request.args["name"])
     return render_template(
         "components/accounts.html.j2", clients=database.bindables.list()
@@ -54,6 +59,7 @@ def create():
         )
     pw = secrets.token_urlsafe(settings.BINDABLE_PW_LENGTH)
     database.bindables.create(name, pw)
+    logger.info("user %s created %s", session["username"], name)
     return render_template(
         "created_pw.html.j2",
         dn=f"uid={name},{settings.SERVICE_DN}",
@@ -64,4 +70,8 @@ def create():
 
 @bp.get("panel")
 def panel():
-    return render_template("admin.html.j2", clients=database.bindables.list())
+    return render_template(
+        "admin.html.j2",
+        username=session["username"],
+        clients=database.bindables.list(),
+    )

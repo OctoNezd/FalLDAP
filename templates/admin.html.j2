@@ -29,9 +29,9 @@
     </div>
     <span id="title">FalLDAP Admin panel</span>
     <span>Hello, {{ username }}</span>
+    <button onclick="modal_toggle('create')">Create service account</button>
+
     <div class="container">
-        <button onclick="modal_toggle('create')">Create service account</button>
-        </details>
         <h3>Service accounts:</h3>
         {% include "components/accounts.html.j2" %}
     </div>
