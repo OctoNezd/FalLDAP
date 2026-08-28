@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FalLDAP</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='progress.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='general.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='toastify.min.css') }}" />
+    <script src="{{ url_for('static', filename='progress.js') }}"></script>
+    <script src="{{ url_for('static', filename='toastify.js') }}"></script>
+    <meta name="darkreader-lock">
+</head>
+
+<body>
+    <span id="title">FalLDAP</span>
+    <span>Hello, {{ username }}</span>
+    <span>Enter this one-time password in your LDAP application:</span>
+    <div id="bar"></div>
+    <a href="{{ url_for('oidc_auth.logout') }}">Log out</a>
+    <script>
+        var remaining_time = {{ remaining_time }};
+        const total_time = {{ remaining_time }};
+        var bar = new RadialProgress(document.getElementById("bar"), { progress: 0.9, colorFg: "#FF5858", thick: 2.5, fixedTextSize: 0.8, noPercentage: true });
+        const codeEl = document.createElement("span");
+        codeEl.id = "code";
+        codeEl.innerText = "{{ code }}";
+        bar.text.appendChild(codeEl);
+    </script>
+    <script src="{{ url_for('static', filename='general.js') }}"></script>
+</body>
+
+</html>
