@@ -5,9 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FalLDAP</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='progress.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='general.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='otp.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='toastify.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='button.css') }}" />
     <script src="{{ url_for('static', filename='progress.js') }}"></script>
     <script src="{{ url_for('static', filename='toastify.js') }}"></script>
     <meta name="darkreader-lock">
@@ -28,7 +29,7 @@
         codeEl.innerText = "{{ code }}";
         bar.text.appendChild(codeEl);
     </script>
-    <script src="{{ url_for('static', filename='general.js') }}"></script>
+    <script src="{{ url_for('static', filename='otp.js') }}"></script>
 </body>
 
 </html>

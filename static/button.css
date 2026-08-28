@@ -1,0 +1,8 @@
+a {
+    border: solid var(--border-thickness) var(--front-color);
+    border-radius: 5px;
+    color: var(--front-color);
+    text-decoration: none;
+    padding: 20px;
+    display: block;
+}

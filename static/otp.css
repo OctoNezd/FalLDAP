@@ -1,0 +1,30 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    gap: 30px;
+}
+#title {
+    font-size: xx-large;
+}
+.rp_canvas {
+    font-size: 1em;
+}
+#bar {
+    cursor: pointer;
+}
+.rp_text {
+    color: var(--front-color);
+}
+#clicktocopytext {
+    font-size: 0.8em;
+    color: grey;
+    display: block;
+}
+#code {
+    font-family: monospace;
+}
