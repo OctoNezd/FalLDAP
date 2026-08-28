@@ -1,30 +1,16 @@
-import secrets
-from functools import wraps
+from flask import Flask, jsonify, redirect, url_for
 
-import bcrypt
-from flask import (
-    Flask,
-    abort,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
-from flask_oidc import OpenIDConnect
-
-import database
 import ext
 import settings
-from blueprints import otp, scim
+from blueprints import admin, otp, scim
 
 app = Flask(__name__)
+app.config.from_prefixed_env()
 app.secret_key = settings.SESSION_SECRET
-app.config["OIDC_CLIENT_SECRETS"] = "./client_secrets.json"
 ext.oidc.init_app(app)
 app.register_blueprint(scim.bp)
 app.register_blueprint(otp.bp)
+app.register_blueprint(admin.bp)
 
 
 def has_no_empty_params(rule):

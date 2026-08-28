@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='toastify.min.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='button.css') }}" />
     <script src="{{ url_for('static', filename='progress.js') }}"></script>
+    <script src="{{ url_for('static', filename='clipboard.js') }}"></script>
     <script src="{{ url_for('static', filename='toastify.js') }}"></script>
     <meta name="darkreader-lock">
 </head>
@@ -19,13 +20,17 @@
     <span>Hello, {{ username }}</span>
     <span>Enter this one-time password in your LDAP application:</span>
     <div id="bar"></div>
-    <a href="{{ url_for('oidc_auth.logout') }}">Log out</a>
+    <a class="btn" href="{{ url_for('oidc_auth.logout') }}">Log out</a>
+    {% if is_admin %}
+    <a class="btn" href="{{ url_for('admin.panel') }}">Admin panel</a>
+    {% endif %}
     <script>
         var remaining_time = {{ remaining_time }};
         const total_time = {{ remaining_time }};
         var bar = new RadialProgress(document.getElementById("bar"), { progress: 0.9, colorFg: "#FF5858", thick: 2.5, fixedTextSize: 0.8, noPercentage: true });
         const codeEl = document.createElement("span");
         codeEl.id = "code";
+        codeEl.classList.add("code")
         codeEl.innerText = "{{ code }}";
         bar.text.appendChild(codeEl);
     </script>

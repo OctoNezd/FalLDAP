@@ -16,6 +16,7 @@ vk = valkey.Valkey.from_url(settings.VALKEY_URL, decode_responses=True)
 logger = getLogger("database")
 USER_SET_ID = "users"
 GROUP_SET_ID = "groups"
+BINDABLES_SET_ID = "bindables"
 
 
 class ScimLDAPGroup(scim2_models.Group):
@@ -182,7 +183,7 @@ def auth_user(user: distinguishedname.DistinguishedName, password):
     parent_dn = user.up().getText()
     uid = user.getText().split(",")[0].split("=", 1)[1]
     if parent_dn == settings.SERVICE_DN:
-        crypted = vk.get(f"bindables:{uid}")
+        crypted = bindables.get_pw(uid)
     elif parent_dn == settings.USER_DN:
         user_scim = users.get_record_by_uid(uid)
         if user_scim is None:
@@ -192,9 +193,44 @@ def auth_user(user: distinguishedname.DistinguishedName, password):
         logger.error("Invalid DN specified: %s (parent: %s)", user, parent_dn)
         return False
     if crypted is None:
+        logger.info("Rejecting invalid uid %s in dn %s", uid, parent_dn)
         return False
     return bcrypt.checkpw(password, crypted.encode("utf-8"))
 
 
+class BindablesManager:
+    def list(self) -> list[str]:
+        members = []
+        for member in vk.smembers(BINDABLES_SET_ID):
+            # clean out invalid members
+            if not self.exists(member):
+                vk.srem(BINDABLES_SET_ID, member)
+            else:
+                members.append(member)
+        return members
+
+    def delete(self, name):
+        vk.delete(f"{BINDABLES_SET_ID}:{name}")
+        vk.srem(BINDABLES_SET_ID, name)
+
+    def create(self, name, password):
+        vk.sadd(BINDABLES_SET_ID, name)
+        vk.set(
+            f"{BINDABLES_SET_ID}:{name}",
+            bcrypt.hashpw(password.encode(), bcrypt.gensalt()),
+        )
+
+    def exists(self, name):
+        return vk.sismember(BINDABLES_SET_ID, name) and vk.exists(
+            f"{BINDABLES_SET_ID}:{name}"
+        )
+
+    def get_pw(self, name):
+        if self.exists(name):
+            return vk.get(f"{BINDABLES_SET_ID}:{name}")
+        return None
+
+
 users = ScimRecordManager(USER_SET_ID, ScimLDAPUser)  # type: ignore
 groups = ScimRecordManager(GROUP_SET_ID, ScimLDAPGroup)  # type: ignore
+bindables = BindablesManager()

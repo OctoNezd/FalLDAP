@@ -10,13 +10,43 @@ body {
         sans-serif;
 }
 html {
-    --back-color: white;
-    --front-color: black;
-    --border-thickness: 2px;
+    --back-color-raw: 255, 255, 255;
+    --back-color: rgb(var(--back-color-raw));
+    --front-color-raw: rgb(0, 0, 0);
+    --front-color: rgb(var(--front-color-raw));
+    --border-thickness: 1px;
+    --border-radius: 5px;
+}
+#title {
+    font-size: xx-large;
+}
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    gap: 30px;
 }
 @media (prefers-color-scheme: dark) {
     html {
-        --back-color: black;
-        --front-color: white;
+        --back-color: rgb(0, 0, 0);
+        --front-color: rgb(255, 255, 255);
     }
+}
+.code {
+    font-family: monospace;
+}
+
+.codecopy {
+    cursor: pointer;
+    text-decoration: none;
+    color: lightgray;
+    padding: 3px;
+    display: block;
+}
+td button {
+    padding: 8px !important;
 }

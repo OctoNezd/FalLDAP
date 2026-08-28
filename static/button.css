@@ -1,8 +1,13 @@
-a {
+a.btn,
+summary,
+button {
     border: solid var(--border-thickness) var(--front-color);
-    border-radius: 5px;
+    background-color: var(--back-color);
+    border-radius: var(--border-radius);
     color: var(--front-color);
     text-decoration: none;
     padding: 20px;
     display: block;
+    cursor: pointer;
+    text-align: center;
 }

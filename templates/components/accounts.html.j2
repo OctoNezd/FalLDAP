@@ -1,0 +1,25 @@
+<table style="width: 100%" id="accounts">
+    <tr>
+        <th>
+            Name
+        <th>
+            Actions
+        </th>
+        </th>
+    </tr>
+    {% for client in clients %}
+    <tr>
+        <td>{{ client }}</td>
+        <td>
+            <form hx-delete="{{ url_for('admin.delete') }}" hx-target="#accounts">
+                <button type="submit" name="name" value="{{ client }}">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr>
+        <td style="border-right: none">There are no clients set up.
+        </td>
+    </tr>
+    {% endfor %}
+</table>

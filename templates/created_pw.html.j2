@@ -1,0 +1,14 @@
+<hx-partial hx-target="#accounts" hx-swap="outerHTML">
+    {% include "components/accounts.html.j2" %}
+</hx-partial>
+
+<div>
+    <p>Account created. Here are credentials. </p>
+    <p>You wont be able to see the password again, so save it.</p>
+    <p>Bind DN:</p>
+    <span href="javascript:void(0)" class="code codecopy" onclick="copyMe(this)">{{ dn }}</span>
+    <p>Password:</p>
+    <span href="javascript:void(0)" class="code codecopy" onclick="copyMe(this)">{{ password }}</span>
+    <br />
+    <button onclick="modal_close('create')">Close</button>
+</div>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FalLDAP</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='general.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='button.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='modal.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='toastify.min.css') }}" />
+    <script src="{{ url_for('static', filename='clipboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='toastify.js') }}"></script>
+    <script src="{{ url_for('static', filename='htmx.min.js') }}"></script>
+    <meta name="darkreader-lock">
+</head>
+
+<body>
+    <div class="modal" id="create">
+        <div class="modal-body">
+            <form hx-post="{{ url_for('admin.create') }}" id="createform">
+                <h1>Create service account</h1>
+                <label for="name">Account name:</label>
+                <input type="text" name="name">
+                <button type="submit">Create account</button>
+            </form>
+        </div>
+    </div>
+    <span id="title">FalLDAP Admin panel</span>
+    <span>Hello, {{ username }}</span>
+    <div class="container">
+        <button onclick="modal_toggle('create')">Create service account</button>
+        </details>
+        <h3>Service accounts:</h3>
+        {% include "components/accounts.html.j2" %}
+    </div>
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
+    <script src="{{ url_for('static', filename='modal.js') }}"></script>
+</body>
+
+</html>
