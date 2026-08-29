@@ -33,7 +33,7 @@
 
     <div class="container">
         <h3>Service accounts:</h3>
-        {% include "components/accounts.html.j2" %}
+        <div hx-get="{{ url_for('admin.clients') }}" hx-trigger="load"></div>
     </div>
     <script src="{{ url_for('static', filename='admin.js') }}"></script>
     <script src="{{ url_for('static', filename='modal.js') }}"></script>

@@ -35,6 +35,13 @@ def delete():
     )
 
 
+@bp.get("clients")
+def clients():
+    return render_template(
+        "components/accounts.html.j2", clients=database.bindables.list()
+    )
+
+
 @bp.post("create")
 def create():
     name = request.form["name"]
@@ -73,5 +80,4 @@ def panel():
     return render_template(
         "admin.html.j2",
         username=session["username"],
-        clients=database.bindables.list(),
     )
