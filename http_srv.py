@@ -19,17 +19,6 @@ def has_no_empty_params(rule):
     return len(defaults) >= len(arguments)
 
 
-@app.route("/site-map")
-def site_map():
-    links = []
-    for rule in app.url_map.iter_rules():
-        # Filter out rules we can't navigate to in a browser
-        # and rules that require parameters
-        links.append((rule.rule, rule.endpoint, list(rule.methods)))
-    # links is now a list of url, endpoint tuples
-    return jsonify(links)
-
-
 @app.route("/")
 def index():
     return redirect(url_for("otp.index"), 301)
