@@ -35,6 +35,8 @@
         <h3>Service accounts:</h3>
         <div hx-get="{{ url_for('admin.clients') }}" hx-trigger="load"></div>
     </div>
+    <a class="btn" href="{{ url_for('oidc_auth.logout') }}">Log out</a>
+
     <script src="{{ url_for('static', filename='admin.js') }}"></script>
     <script src="{{ url_for('static', filename='modal.js') }}"></script>
 </body>

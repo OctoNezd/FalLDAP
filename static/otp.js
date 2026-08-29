@@ -25,13 +25,19 @@ function init_otp(total_time, code) {
         remaining_time -= 0.1;
         const progress = remaining_time / total_time;
         bar.setValue(progress);
-        let finalcolor = "green";
-        if (progress < 0.3) {
-            finalcolor = "red";
-        } else if (progress < 0.8) {
-            finalcolor = "yellow";
+        // i asked deepseek for this and it threw that at me
+        // it looks good enough
+        let hue;
+        if (progress >= 0.8) {
+            const t = (progress - 0.8) / 0.2; // 1 → 0
+            hue = 60 + 60 * t; // 120 (green) → 60 (yellow)
+        } else if (progress >= 0.3) {
+            const t = (progress - 0.3) / 0.5; // 1 → 0
+            hue = 60 * t; // 60 (yellow) → 0 (red)
+        } else {
+            hue = 0;
         }
-        bar.colorFg = finalcolor;
+        bar.colorFg = `hsl(${hue}, 100%, 50%)`;
         bar.draw(true);
     }, timeframe * 1000);
     document.getElementById("bar").onclick = () => {
