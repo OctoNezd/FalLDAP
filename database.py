@@ -79,9 +79,10 @@ class ScimLDAPUser(scim2_models.User):
         if attributes is not None and len(attributes) > 0:
             filtered_attrs = {}
             for attribute in attributes:
+                if isinstance(attribute, bytes):
+                    attribute = attribute.decode()
                 if attribute not in attrs:
                     continue
-                attribute = attribute.decode()
                 filtered_attrs[attribute] = attrs[attribute]
         return ReadOnlyInMemoryLDAPEntry(
             dn=f"uid={self.user_name},{settings.USER_DN}", attributes=filtered_attrs
@@ -118,13 +119,23 @@ class ScimRecordManager:
             raise abort(404)
         return self.record_class.model_validate_json(item_vk)
 
-    def get_all_ldap(self, callback, attrs):
+    def get_all_ldap(self, callback, attrs, group=None):
         if self.record_class == ScimLDAPUser:
             _, grouplist = groups.list_records(0, -1)
+        elif group is not None:
+            # no nested groups in SCIM afaik
+            return
         _, users = self.list_records(0, -1)
         for item in users:
             if self.record_class == ScimLDAPUser:
+                if group is not None and (
+                    attrs is not None and len(attrs) > 0 and b"memberOf" not in attrs
+                ):
+                    attrs.append("memberOf")
                 item = item.get_ldap_ldif(attrs, grouplist)
+                if group is not None:
+                    if group not in item._attributes["memberOf"]:
+                        continue
             else:
                 item = item.get_ldap_ldif(attrs)
             callback(item)

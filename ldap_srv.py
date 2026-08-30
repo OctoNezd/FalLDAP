@@ -13,6 +13,7 @@ from ldaptor.protocols.pureldap import (
     LDAPExtendedResponse,
     LDAPFilter_and,
     LDAPFilter_equalityMatch,
+    LDAPFilter_or,
     LDAPFilter_present,
 )
 from twisted.application import service
@@ -31,7 +32,8 @@ logger = logging.getLogger("ldap")
 
 class MixedFilter(pydantic.BaseModel):
     object_type: Optional[Literal["user", "group"]] = None
-    query: Optional[str] = None
+    query: Optional[bytes] = None
+    group_filter: Optional[str] = None
 
 
 def get_filter_params(
@@ -42,18 +44,32 @@ def get_filter_params(
         currentFilter = MixedFilter()
     if isinstance(filterobject, LDAPFilter_present):
         return currentFilter
+    elif isinstance(filterobject, LDAPFilter_or):
+        fo = list(filterobject)
+        if len(fo) > 1:
+            raise NotImplementedError(
+                "Or operation for more than one parameter is not supported."
+            )
+        currentFilter = get_filter_params(fo[0], currentFilter)
     elif isinstance(filterobject, LDAPFilter_and):
         for subfilter in filterobject:
-            get_filter_params(subfilter, currentFilter)
+            currentFilter = get_filter_params(subfilter, currentFilter)
     elif isinstance(filterobject, LDAPFilter_equalityMatch):
-        attrdesc = filterobject.attributeDesc.value
-        if attrdesc == b"objectClass":
+        attrdesc = filterobject.attributeDesc.value.lower()
+        if attrdesc == b"objectclass":
             if filterobject.assertionValue.value in [b"person", b"inetOrgPerson"]:
                 currentFilter.object_type = "user"
             elif filterobject.assertionValue.value in [b"groupOfNames"]:
                 currentFilter.object_type = "group"
-        elif attrdesc == b"uid":
+        elif attrdesc in [b"uid", b"cn"]:
             currentFilter.query = filterobject.assertionValue.value.decode()
+            if currentFilter.object_type is None:
+                if attrdesc == b"uid":
+                    currentFilter.object_type = "user"
+                else:
+                    currentFilter.object_type = "group"
+        elif attrdesc == b"memberof":
+            currentFilter.group_filter = filterobject.assertionValue.value.decode()
         else:
             raise NotImplementedError(f"I dont speak attributeDesc {attrdesc}")
     else:
@@ -80,20 +96,26 @@ class FalLDAPEntry(ReadOnlyInMemoryLDAPEntry):
         desired_filter = get_filter_params(filterObject)
         if desired_filter.object_type == "user":
             if desired_filter.query is None:
-                database.users.get_all_ldap(callback, attributes)
+                database.users.get_all_ldap(
+                    callback, attributes, desired_filter.group_filter
+                )
             else:
                 record = database.users.get_record_by_uid(desired_filter.query)
                 if record is None:
+                    logger.info("Failed to find %s", desired_filter)
                     return defer.succeed(None)
                 # shut up the linter
                 _, groups = database.groups.list_records(
                     0, -1
                 )  # pyright: ignore[reportAssignmentType]
                 groups: list[database.ScimLDAPGroup]
-                callback(record.get_ldap_ldif(attributes, groups))
+                record = record.get_ldap_ldif(attributes, groups)
+                callback(record)
         elif desired_filter.object_type == "group":
             if desired_filter.query is None:
-                database.groups.get_all_ldap(callback, attributes)
+                database.groups.get_all_ldap(
+                    callback, attributes, desired_filter.group_filter
+                )
             else:
                 record = database.groups.get_record_by_uid(desired_filter.query)
                 if record is None:
@@ -101,8 +123,13 @@ class FalLDAPEntry(ReadOnlyInMemoryLDAPEntry):
                 assert isinstance(record, database.ScimLDAPGroup)
                 callback(record.get_ldap_ldif(attributes))
         if desired_filter.object_type is None:
-            database.users.get_all_ldap(callback, attributes)
-            database.groups.get_all_ldap(callback, attributes)
+            database.users.get_all_ldap(
+                callback, attributes, desired_filter.group_filter
+            )
+            database.groups.get_all_ldap(
+                callback, attributes, desired_filter.group_filter
+            )
+
         return defer.succeed(None)
 
 
@@ -111,7 +138,11 @@ class LDAPServerLogged(LDAPServer):
 
     def handle_LDAPSearchRequest(self, request, controls, reply):
         res: defer.Deferred = super().handle_LDAPSearchRequest(request, controls, reply)
-        logger.info("%s searched for %s", self.dn, repr(request.filter))
+        logger.info(
+            "%s searched for %s",
+            self.dn,
+            repr(request.filter),
+        )
         return res
 
     def handle_LDAPBindRequest(self, request, controls, reply):
@@ -142,6 +173,7 @@ class LDAPServerLogged(LDAPServer):
             ldap_record = record.get_ldap_ldif(
                 [], database.groups.list_records(0, -1)[1]
             )
+            logger.info("%s asked for whoami", self.dn)
             return defer.succeed(
                 LDAPExtendedResponse(
                     ldaperrors.Success.resultCode, response=ldap_record
