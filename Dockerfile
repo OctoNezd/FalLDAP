@@ -20,3 +20,4 @@ ENV HTTP_HOST=0.0.0.0
 ENV LDAP_HOST=0.0.0.0
 ENV HOME=/tmp
 CMD ["supervisord"]
+LABEL org.opencontainers.image.source=https://github.com/octonezd/falldap
