@@ -4,7 +4,7 @@ import secrets
 
 import dotenv
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(".env.dev")
 
 HTTP_PORT = int(os.environ["HTTP_PORT"])
 LDAP_PORT = int(os.environ["LDAP_PORT"])
@@ -16,10 +16,10 @@ GROUP_DN = os.environ.get("GROUP_DN", "cn=groups,cn=accounts," + BASE_DN)
 SERVICE_DN = os.environ.get("SERVICE_DN", "cn=sysaccounts,cn=etc," + BASE_DN)
 PASSWORD_LIFE = int(os.environ["PASSWORD_LIFE"])
 PASSWORD_LENGTH = int(os.environ["PASSWORD_LENGTH"])
-LOG_ALL_LOGINS = bool(os.environ.get("LOG_ALL_LOGINS", 1))
-LOG_INVALID_LOGINS = bool(os.environ.get("LOG_INVALID_LOGINS", 1))
-LOG_SEARCHES = bool(os.environ.get("LOG_SEARCHES", 1))
+LOG_ALL_LOGINS = bool(os.environ.get("LOG_ALL_LOGINS", ""))
+LOG_INVALID_LOGINS = bool(os.environ.get("LOG_INVALID_LOGINS", "yes"))
+LOG_SEARCHES = bool(os.environ.get("LOG_SEARCHES", ""))
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_bytes(64))
-ADMIN_GROUP = os.environ.get("ADMIN_GROUP", None)
+ADMIN_GROUP = os.environ.get("ADMIN_GROUP", "admin")
 GROUP_KEY = os.environ.get("GROUP_KEY", "groups")
 BINDABLE_PW_LENGTH = int(os.environ.get("BINDABLE_PW_LENGTH", 24))

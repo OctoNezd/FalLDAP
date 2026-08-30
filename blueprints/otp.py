@@ -1,7 +1,7 @@
 import secrets
 
 import bcrypt
-from flask import Blueprint, render_template, session
+from flask import Blueprint, abort, render_template, session
 
 import database
 import ext

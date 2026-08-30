@@ -151,6 +151,7 @@ activemq-data/
 
 # Environments
 .env
+.env.dev
 .envrc
 .venv
 env/
@@ -221,3 +222,4 @@ __marimo__/
 
 dump.rdb
 client_secrets.json
+falldap-data/

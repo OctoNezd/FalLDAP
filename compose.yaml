@@ -1,0 +1,18 @@
+services:
+  falldap:
+    image: ghcr.io/octonezd/falldap
+    volumes:
+      - ./client_secrets.json:/app/client_secrets.json
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      - falldap-valkey
+    ports:
+      - 8389:8389
+      - 8080:8080
+  falldap-valkey:
+    image: valkey/valkey:9
+    volumes:
+      - ./falldap-data/valkey:/data
+    command: --save 60 1
+    restart: unless-stopped

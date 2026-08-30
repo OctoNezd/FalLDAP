@@ -1,6 +1,6 @@
 # FalLDAP
 
-A crutch to make your stubborn LDAP-only apps to work with OIDC server.
+A fallback-crutch to make your stubborn LDAP-only apps to work with OIDC server.
 
 ## Requirements
 

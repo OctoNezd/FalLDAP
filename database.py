@@ -190,7 +190,7 @@ def auth_user(user: distinguishedname.DistinguishedName, password):
             return False
         crypted = vk.get(f"temppwd:{user_scim.id}")
     else:
-        logger.error("Invalid DN specified: %s (parent: %s)", user, parent_dn)
+        logger.error("Invalid DN specified: %s (parent: %s)", user.getText(), parent_dn)
         return False
     if crypted is None:
         logger.info("Rejecting invalid uid %s in dn %s", uid, parent_dn)
