@@ -10,6 +10,7 @@ from ldaptor.interfaces import IConnectedLDAPEntry
 from ldaptor.protocols.ldap import ldaperrors
 from ldaptor.protocols.ldap.ldapserver import LDAPServer
 from ldaptor.protocols.pureldap import (
+    LDAPExtendedResponse,
     LDAPFilter_and,
     LDAPFilter_equalityMatch,
     LDAPFilter_present,
@@ -126,6 +127,27 @@ class LDAPServerLogged(LDAPServer):
         if not login_failed:
             self.dn = request.dn
         return res
+
+    def handle_LDAPExtendedRequest(self, request, controls, reply):
+        # i wanted to try extendedRequest_ but writing that will make me go insane
+        if request.requestName == b"1.3.6.1.4.1.4203.1.11.3":
+            if self.dn is None:
+                return defer.fail(ldaperrors.LDAPInvalidCredentials())
+            uid = self.dn.decode("utf-8").split(",")[0].split("=")[1]
+            record: database.ScimLDAPUser = database.users.get_record_by_uid(
+                uid
+            )  # pyright: ignore[reportAssignmentType]
+            if record is None:
+                return defer.fail(ldaperrors.LDAPInvalidCredentials())
+            ldap_record = record.get_ldap_ldif(
+                [], database.groups.list_records(0, -1)[1]
+            )
+            return defer.succeed(
+                LDAPExtendedResponse(
+                    ldaperrors.Success.resultCode, response=ldap_record
+                )
+            )
+        return super().handle_LDAPExtendedRequest(request, controls, reply)
 
 
 class LDAPServerFactory(ServerFactory):
