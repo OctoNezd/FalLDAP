@@ -6,6 +6,8 @@ import dotenv
 
 dotenv.load_dotenv(".env.dev")
 
+HTTP_HOST = os.environ.get("HTTP_HOST", "0.0.0.0")
+LDAP_HOST = os.environ.get("LDAP_HOST", "0.0.0.0")
 HTTP_PORT = int(os.environ["HTTP_PORT"])
 LDAP_PORT = int(os.environ["LDAP_PORT"])
 SCIM_TOKEN = os.environ["SCIM_TOKEN"]
@@ -23,3 +25,4 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_bytes(64))
 ADMIN_GROUP = os.environ.get("ADMIN_GROUP", "admin")
 GROUP_KEY = os.environ.get("GROUP_KEY", "groups")
 BINDABLE_PW_LENGTH = int(os.environ.get("BINDABLE_PW_LENGTH", 24))
+DEBUG = bool(os.environ.get("DEBUG", ""))

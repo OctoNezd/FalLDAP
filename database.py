@@ -4,11 +4,10 @@ import uuid
 from logging import getLogger
 
 import bcrypt
+import ldapserver
 import scim2_models
 import valkey
 from flask import abort
-from ldaptor.inmemory import ReadOnlyInMemoryLDAPEntry
-from ldaptor.protocols.ldap import distinguishedname
 
 import settings
 
@@ -20,35 +19,32 @@ BINDABLES_SET_ID = "bindables"
 
 
 class ScimLDAPGroup(scim2_models.Group):
-    def get_ldap_ldif(self, attributes: None | list[bytes]):
+    def get_ldap_ldif(
+        self, schema: ldapserver.SubschemaSubentry
+    ) -> ldapserver.ObjectEntry:
         attrs = {
             "objectClass": ["top", "groupOfNames"],
             "cn": [self.display_name],
-            "members": [],
+            "member": [],
         }
         if self.members:
             for member in self.members:
                 scimuser: ScimLDAPUser = users.get_record(
                     member.value
                 )  # pyright: ignore[reportAssignmentType]
-                attrs["members"].append(f"uid={scimuser.user_name},{settings.BASE_DN}")
-        filteredAttrs = attrs
-        if attributes:
-            filteredAttrs = {}
-            for attribute in attributes:
-                attribute = attribute.decode()
-                if attribute not in attrs:
-                    continue
-                filteredAttrs[attribute] = attrs[attribute]
-        return ReadOnlyInMemoryLDAPEntry(
-            dn=f"cn={self.display_name},{settings.GROUP_DN}", attributes=filteredAttrs
+                attrs["member"].append(
+                    schema.DN.from_str(f"uid={scimuser.user_name},{settings.BASE_DN}")
+                )
+
+        return schema.ObjectEntry(
+            dn=f"cn={self.display_name},{settings.GROUP_DN}", **attrs
         )
 
 
 class ScimLDAPUser(scim2_models.User):
     def get_ldap_ldif(
-        self, attributes: None | list[bytes], groups: list[ScimLDAPGroup]
-    ) -> ReadOnlyInMemoryLDAPEntry:
+        self, groups: list[ScimLDAPGroup], schema: ldapserver.SubschemaSubentry
+    ) -> ldapserver.ObjectEntry:
         cn = self.display_name or self.user_name
         attrs = {
             "objectClass": ["top", "person", "inetOrgPerson"],
@@ -66,26 +62,18 @@ class ScimLDAPUser(scim2_models.User):
             attrs["mail"] = []
             for mail in self.emails:
                 attrs["mail"].append(mail.value)
-        if attributes is None or (len(attributes) == 0 or "memberOf" in attributes):
-            attrs["memberOf"] = []
-            for group in groups:
-                if group.members:
-                    for member in group.members:
-                        if member.value == self.id:
-                            attrs["memberOf"].append(
+        attrs["memberOf"] = []
+        for group in groups:
+            if group.members:
+                for member in group.members:
+                    if member.value == self.id:
+                        attrs["memberOf"].append(
+                            schema.DN.from_str(
                                 f"cn={group.display_name},{settings.GROUP_DN}"
                             )
-        filtered_attrs = attrs
-        if attributes is not None and len(attributes) > 0:
-            filtered_attrs = {}
-            for attribute in attributes:
-                if isinstance(attribute, bytes):
-                    attribute = attribute.decode()
-                if attribute not in attrs:
-                    continue
-                filtered_attrs[attribute] = attrs[attribute]
-        return ReadOnlyInMemoryLDAPEntry(
-            dn=f"uid={self.user_name},{settings.USER_DN}", attributes=filtered_attrs
+                        )
+        return schema.ObjectEntry(
+            dn=f"uid={self.user_name},{settings.USER_DN}", **attrs
         )
 
 
@@ -119,26 +107,30 @@ class ScimRecordManager:
             raise abort(404)
         return self.record_class.model_validate_json(item_vk)
 
-    def get_all_ldap(self, callback, attrs, group=None):
+    def get_all_ldap(self, schema: ldapserver.SubschemaSubentry, group=None):
+        if group is not None:
+            group = schema.DN.from_str(group)
         if self.record_class == ScimLDAPUser:
-            _, grouplist = groups.list_records(0, -1)
+            _, grouplist = groups.list_records(
+                0, -1
+            )  # pyright: ignore[reportAssignmentType]
+            grouplist: list[ScimLDAPGroup]
         elif group is not None:
             # no nested groups in SCIM afaik
             return
         _, users = self.list_records(0, -1)
+        users: list[self.record_class]
         for item in users:
             if self.record_class == ScimLDAPUser:
-                if group is not None and (
-                    attrs is not None and len(attrs) > 0 and b"memberOf" not in attrs
-                ):
-                    attrs.append("memberOf")
-                item = item.get_ldap_ldif(attrs, grouplist)
+                item = item.get_ldap_ldif(
+                    groups=grouplist, schema=schema
+                )  # pyright: ignore[reportPossiblyUnboundVariable]
                 if group is not None:
-                    if group not in item._attributes["memberOf"]:
+                    if group not in item["memberOf"]:
                         continue
-            else:
-                item = item.get_ldap_ldif(attrs)
-            callback(item)
+                yield item
+            elif self.record_class == ScimLDAPGroup:
+                yield item.get_ldap_ldif(schema=schema)
 
     def get_record_by_uid(self, uid) -> ScimLDAPUser | ScimLDAPGroup | None:
         record_id = vk.get(f"uid{self.set_id}:{uid}")
@@ -190,9 +182,9 @@ class ScimRecordManager:
         return item
 
 
-def auth_user(user: distinguishedname.DistinguishedName, password):
-    parent_dn = user.up().getText()
-    uid = user.getText().split(",")[0].split("=", 1)[1]
+def auth_user(user: str, password):
+    parent_dn = user.split(",", 1)[1]
+    uid = user.split(",")[0].split("=", 1)[1]
     if parent_dn == settings.SERVICE_DN:
         crypted = bindables.get_pw(uid)
     elif parent_dn == settings.USER_DN:
@@ -206,7 +198,12 @@ def auth_user(user: distinguishedname.DistinguishedName, password):
     if crypted is None:
         logger.info("Rejecting invalid uid %s in dn %s", uid, parent_dn)
         return False
-    return bcrypt.checkpw(password, crypted.encode("utf-8"))
+    res = bcrypt.checkpw(password, crypted.encode("utf-8"))
+    if res and settings.LOG_ALL_LOGINS:
+        logger.info("%s logged in", user)
+    elif settings.LOG_ALL_LOGINS or settings.LOG_INVALID_LOGINS:
+        logger.info("%s failed to log in", user)
+    return res
 
 
 class BindablesManager:

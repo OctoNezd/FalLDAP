@@ -22,3 +22,7 @@ def has_no_empty_params(rule):
 @app.route("/")
 def index():
     return redirect(url_for("otp.index"), 301)
+
+
+if __name__ == "__main__":
+    app.run(host=settings.HTTP_HOST, port=settings.HTTP_PORT, debug=settings.DEBUG)

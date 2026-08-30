@@ -38,3 +38,4 @@ Run `python3 -c "import secrets;print(secrets.token_urlsafe(64))"` and use its o
 - `LOG_INVALID_LOGINS` - logs invalid logins (wrong password, user doesnt exist, invalid DN specified)
 - `LOG_SEARCHES` - logs LDAP searches
 - `SESSION_SECRET` - secret for HTTP server session. Random on every restart by default, set it to make webapp session persist, useful for development.
+- `TRUST_PROXY` - trusted reverse proxies

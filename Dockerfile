@@ -4,9 +4,19 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install
 
 FROM python:3.14-slim AS main
-COPY --from=requirements /app/.venv /app/.venv
-COPY . /app/
-RUN groupadd --gid 1000 nonroot && useradd --uid 1000 --gid 1000 --no-create-home --shell /bin/bash nonroot
+RUN pip install supervisor
 WORKDIR /app
+COPY --from=requirements /app/.venv /app/.venv
+RUN groupadd --gid 1000 nonroot && useradd --uid 1000 --gid 1000 --no-create-home --shell /bin/bash nonroot
+COPY ./static /app/static/
+COPY ./templates /app/templates/
+COPY *.py /app/
+COPY ./blueprints /app/blueprints
+COPY supervisord.conf /app/
 USER nonroot
-CMD ["/app/.venv/bin/python3", "/app/main.py"]
+ENV HTTP_PORT=8080
+ENV LDAP_PORT=8389
+ENV HTTP_HOST=0.0.0.0
+ENV LDAP_HOST=0.0.0.0
+ENV HOME=/tmp
+CMD ["supervisord"]

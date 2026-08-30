@@ -1,75 +1,63 @@
-import io
 import logging
-import socket
-import sys
+import socketserver
 from typing import Literal, Optional
 
+import ldapserver
 import pydantic
-from ldaptor.inmemory import InMemoryLDIFProtocol, ReadOnlyInMemoryLDAPEntry
-from ldaptor.interfaces import IConnectedLDAPEntry
-from ldaptor.protocols.ldap import ldaperrors
-from ldaptor.protocols.ldap.ldapserver import LDAPServer
-from ldaptor.protocols.pureldap import (
-    LDAPExtendedResponse,
-    LDAPFilter_and,
-    LDAPFilter_equalityMatch,
-    LDAPFilter_or,
-    LDAPFilter_present,
-)
-from twisted.application import service
-from twisted.internet import defer, reactor
-from twisted.internet.endpoints import serverFromString
-from twisted.internet.protocol import ServerFactory
-from twisted.python import log
-from twisted.python.components import registerAdapter
-from twisted.python.failure import Failure
 
 import database
+import ext
 import settings
 
-logger = logging.getLogger("ldap")
+logger = logging.getLogger("falldap-ldap")
 
 
 class MixedFilter(pydantic.BaseModel):
     object_type: Optional[Literal["user", "group"]] = None
-    query: Optional[bytes] = None
+    query: Optional[str] = None
     group_filter: Optional[str] = None
 
 
 def get_filter_params(
-    filterobject: LDAPFilter_equalityMatch | LDAPFilter_present | LDAPFilter_and,
+    filterobject: (
+        ldapserver.ldap.FilterEqual
+        | ldapserver.ldap.FilterPresent
+        | ldapserver.ldap.FilterAnd
+        | ldapserver.ldap.FilterOr
+        | ldapserver.ldap.Filter
+    ),
     currentFilter: Optional[MixedFilter] = None,
 ):
     if currentFilter is None:
         currentFilter = MixedFilter()
-    if isinstance(filterobject, LDAPFilter_present):
+    if isinstance(filterobject, ldapserver.ldap.FilterPresent):
         return currentFilter
-    elif isinstance(filterobject, LDAPFilter_or):
-        fo = list(filterobject)
-        if len(fo) > 1:
+    elif isinstance(filterobject, ldapserver.ldap.FilterOr):
+        if len(filterobject.filters) > 1:
             raise NotImplementedError(
                 "Or operation for more than one parameter is not supported."
             )
-        currentFilter = get_filter_params(fo[0], currentFilter)
-    elif isinstance(filterobject, LDAPFilter_and):
-        for subfilter in filterobject:
+        currentFilter = get_filter_params(filterobject.filters[0], currentFilter)
+    elif isinstance(filterobject, ldapserver.ldap.FilterAnd):
+        for subfilter in filterobject.filters:
             currentFilter = get_filter_params(subfilter, currentFilter)
-    elif isinstance(filterobject, LDAPFilter_equalityMatch):
-        attrdesc = filterobject.attributeDesc.value.lower()
-        if attrdesc == b"objectclass":
-            if filterobject.assertionValue.value in [b"person", b"inetOrgPerson"]:
+    elif isinstance(filterobject, ldapserver.ldap.FilterEqual):
+        attrdesc = filterobject.attribute.lower()
+        valdesc = filterobject.value.decode()
+        if attrdesc == "objectclass":
+            if valdesc in ["person", "inetOrgPerson"]:
                 currentFilter.object_type = "user"
-            elif filterobject.assertionValue.value in [b"groupOfNames"]:
+            elif valdesc in ["groupOfNames"]:
                 currentFilter.object_type = "group"
-        elif attrdesc in [b"uid", b"cn"]:
-            currentFilter.query = filterobject.assertionValue.value.decode()
+        elif attrdesc in ["uid", "cn"]:
+            currentFilter.query = valdesc
             if currentFilter.object_type is None:
-                if attrdesc == b"uid":
+                if attrdesc == "uid":
                     currentFilter.object_type = "user"
                 else:
                     currentFilter.object_type = "group"
-        elif attrdesc == b"memberof":
-            currentFilter.group_filter = filterobject.assertionValue.value.decode()
+        elif attrdesc == "memberof":
+            currentFilter.group_filter = valdesc
         else:
             raise NotImplementedError(f"I dont speak attributeDesc {attrdesc}")
     else:
@@ -77,124 +65,84 @@ def get_filter_params(
     return currentFilter
 
 
-class FalLDAPEntry(ReadOnlyInMemoryLDAPEntry):
-    def __init__(self, dn, *args, **kwargs):
-        super().__init__(dn=dn, *args, **kwargs)
+class FalLDAP(ldapserver.LDAPRequestHandler):
+    bound_dn = None
+    subschema = ext.subschema
+    supports_whoami = True
+    supports_sasl_anonymous = False
+    supports_paged_results = False
+    supports_password_modify = False
+    supports_sasl_external = False
 
-    def lookup(self, dn):
-        return defer.succeed(FalLDAPEntry(dn=dn))
+    def do_bind_simple_authenticated(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dn, password
+    ) -> bool:
+        if database.auth_user(dn, password):
+            self.bound_dn = dn
+            return True
+        raise ldapserver.exceptions.LDAPInvalidCredentials()
 
-    def bind(self, password):
-        if database.auth_user(self.dn, password):
-            return defer.succeed(self)
-        return defer.fail(ldaperrors.LDAPInvalidCredentials())
-
-    def search(
-        self, filterText=None, filterObject=None, attributes=(), callback=None, **kwargs
+    def do_bind_sasl_plain(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, identity, password, authzid=None
     ):
-        assert callback is not None
-        desired_filter = get_filter_params(filterObject)
-        if desired_filter.object_type == "user":
+        if authzid is not None and identity != authzid:
+            raise ldapserver.exceptions.LDAPInvalidCredentials()
+        if database.auth_user(identity, password):
+            self.bound_dn = identity
+            return True
+        raise ldapserver.exceptions.LDAPInvalidCredentials()
+
+    def do_search(self, baseobj, scope, filterobj):
+        if self.bound_dn is None:
+            raise ldapserver.exceptions.LDAPInsufficientAccessRights(
+                "Binding is required"
+            )
+        if settings.LOG_SEARCHES:
+            logger.info("%s searches for %s", self.bound_dn, filterobj)
+        desired_filter = get_filter_params(filterobj)
+        yield from self.do_search_user(desired_filter)
+        yield from self.do_search_group(desired_filter)
+
+    def do_search_user(self, desired_filter: MixedFilter):
+        if desired_filter.object_type in ["user", None]:
             if desired_filter.query is None:
-                database.users.get_all_ldap(
-                    callback, attributes, desired_filter.group_filter
-                )
+                for user in database.users.get_all_ldap(
+                    schema=self.subschema, group=desired_filter.group_filter
+                ):
+                    yield user
             else:
-                record = database.users.get_record_by_uid(desired_filter.query)
-                if record is None:
-                    logger.info("Failed to find %s", desired_filter)
-                    return defer.succeed(None)
-                # shut up the linter
-                _, groups = database.groups.list_records(
-                    0, -1
+                record: database.ScimLDAPUser = database.users.get_record_by_uid(
+                    desired_filter.query
                 )  # pyright: ignore[reportAssignmentType]
-                groups: list[database.ScimLDAPGroup]
-                record = record.get_ldap_ldif(attributes, groups)
-                callback(record)
-        elif desired_filter.object_type == "group":
+                if record is not None:
+                    # shut up the linter
+                    _, groups = database.groups.list_records(
+                        0, -1
+                    )  # pyright: ignore[reportAssignmentType]
+                    groups: list[database.ScimLDAPGroup]
+                    yield record.get_ldap_ldif(
+                        groups=groups,
+                        schema=self.subschema,
+                    )
+
+    def do_search_group(self, desired_filter: MixedFilter):
+        if desired_filter.object_type in ["group", None]:
             if desired_filter.query is None:
-                database.groups.get_all_ldap(
-                    callback, attributes, desired_filter.group_filter
+                yield from database.groups.get_all_ldap(
+                    group=desired_filter.group_filter, schema=self.subschema
                 )
             else:
                 record = database.groups.get_record_by_uid(desired_filter.query)
-                if record is None:
-                    return defer.succeed(None)
-                assert isinstance(record, database.ScimLDAPGroup)
-                callback(record.get_ldap_ldif(attributes))
-        if desired_filter.object_type is None:
-            database.users.get_all_ldap(
-                callback, attributes, desired_filter.group_filter
-            )
-            database.groups.get_all_ldap(
-                callback, attributes, desired_filter.group_filter
-            )
+                if record is not None:
+                    assert isinstance(record, database.ScimLDAPGroup)
+                    yield record.get_ldap_ldif(schema=self.subschema)
 
-        return defer.succeed(None)
+    def do_whoami(self):
+        return self.bound_dn
 
 
-class LDAPServerLogged(LDAPServer):
-    dn = "unbound"
-
-    def handle_LDAPSearchRequest(self, request, controls, reply):
-        res: defer.Deferred = super().handle_LDAPSearchRequest(request, controls, reply)
-        logger.info(
-            "%s searched for %s",
-            self.dn,
-            repr(request.filter),
-        )
-        return res
-
-    def handle_LDAPBindRequest(self, request, controls, reply):
-        res: defer.Deferred = super().handle_LDAPBindRequest(request, controls, reply)
-        login_failed = isinstance(res.result, Failure)
-        peer = self.transport.getPeer()
-        logger.info(
-            "Bind from %s as %s result: %s",
-            peer.host,
-            request.dn,
-            "failed" if login_failed else "logged in OK",
-        )
-        if not login_failed:
-            self.dn = request.dn
-        return res
-
-    def handle_LDAPExtendedRequest(self, request, controls, reply):
-        # i wanted to try extendedRequest_ but writing that will make me go insane
-        if request.requestName == b"1.3.6.1.4.1.4203.1.11.3":
-            if self.dn is None:
-                return defer.fail(ldaperrors.LDAPInvalidCredentials())
-            uid = self.dn.decode("utf-8").split(",")[0].split("=")[1]
-            record: database.ScimLDAPUser = database.users.get_record_by_uid(
-                uid
-            )  # pyright: ignore[reportAssignmentType]
-            if record is None:
-                return defer.fail(ldaperrors.LDAPInvalidCredentials())
-            ldap_record = record.get_ldap_ldif(
-                [], database.groups.list_records(0, -1)[1]
-            )
-            logger.info("%s asked for whoami", self.dn)
-            return defer.succeed(
-                LDAPExtendedResponse(
-                    ldaperrors.Success.resultCode, response=ldap_record
-                )
-            )
-        return super().handle_LDAPExtendedRequest(request, controls, reply)
-
-
-class LDAPServerFactory(ServerFactory):
-    protocol = LDAPServerLogged
-
-    def __init__(self, root):
-        self.root = root
-
-
-def setup_reactor():
-    root = FalLDAPEntry(
-        dn=settings.BASE_DN,
-    )
-    factory = LDAPServerFactory(root)
-    registerAdapter(
-        lambda factory: factory.root, LDAPServerFactory, IConnectedLDAPEntry
-    )
-    reactor.listenTCP(settings.LDAP_PORT, factory)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    socketserver.ThreadingTCPServer(
+        (settings.LDAP_HOST, settings.LDAP_PORT), FalLDAP
+    ).serve_forever()
