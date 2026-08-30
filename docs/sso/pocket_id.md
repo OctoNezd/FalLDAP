@@ -4,11 +4,11 @@
 
 1. Create new OIDC app. Set it up like this, swapping http://127.0.0.1:8080 for your Pocket ID instance:
 
-![](pocket_id_settings.png)
+![alt text](pocket_id/pocket_id_settings.png)
 
 2. Go into client secret tab, generate new secret with your desired expiration date or no expiration date, write it down somewhere.
 3. Go to SCIM Provisioning tab, set it up like this, swapping http://192.168.88.32:8080 for your FalLDAP server URL and SCIM token for secret you wrote in [.env setup](../env.md)
-   ![](image.png)
+   ![](pocket_id/scim.png)
 4. Write `client_secrets.json` file, swapping for your values:
 
 ```json
@@ -27,4 +27,4 @@
 5. Start FalLDAP
 6. Go to SCIM Provisioning tab in Pocket ID and click _Sync now_ button
 7. Done. Try to log into FalLDAP now, you should see your one-time password:
-   ![](image-1.png)
+   ![](pocket_id/falldap.png)
