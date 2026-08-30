@@ -20,5 +20,6 @@ ENV HTTP_HOST=0.0.0.0
 ENV LDAP_HOST=0.0.0.0
 ENV TRUST_PROXY=127.0.0.0/8
 ENV HOME=/tmp
+EXPOSE 8080 8389
 CMD ["supervisord"]
 LABEL org.opencontainers.image.source=https://github.com/octonezd/falldap
