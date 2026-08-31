@@ -16,7 +16,7 @@ OIDC:
 
 Clients:
 
-- [Jellyfin](docs/client/jellyfin.md)
+- [Jellyfin](docs/clients/jellyfin.md)
 
 ## Maybe-to-dos?
 

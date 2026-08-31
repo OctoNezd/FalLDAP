@@ -223,3 +223,6 @@ __marimo__/
 dump.rdb
 client_secrets.json
 falldap-data/
+
+# mac lol
+.DS_Store
